@@ -12,14 +12,12 @@ export interface WebSearchResponse {
 }
 
 export interface WebSearchOptions {
-  provider: 'agent' | 'exa';
   maxResults?: number;
   apiKey?: string;
   apiUrl?: string;
 }
 
 export interface Config {
-  webSearchProvider: 'agent' | 'exa';
   exaApiKey?: string;
   exaApiUrl?: string;
   maxWebResults?: number;

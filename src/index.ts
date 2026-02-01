@@ -28,7 +28,7 @@ const program = new Command();
 program
   .name('rss-viewer')
   .description('CLI RSS/Atom feed viewer with automatic feed discovery')
-  .version('0.1.0');
+  .version('0.3.0');
 
 program
   .command('init')
@@ -76,7 +76,6 @@ program
   .description('Search articles in database or web')
   .option('--local', 'Search local database only (default)')
   .option('--web', 'Search web for new feeds')
-  .option('--provider <provider>', 'Search provider: agent or exa', 'agent')
   .option('--max-results <n>', 'Max web search results', '10')
   .option('--auto-add', 'Automatically add discovered feeds')
   .option('--no-confirm', 'Skip confirmation prompts')
@@ -91,7 +90,6 @@ program
 program
   .command('discover-search <query>')
   .description('Search web, discover feeds, add, and search articles')
-  .option('--provider <provider>', 'Search provider: agent or exa', 'agent')
   .option('--max-results <n>', 'Max web search results', '10')
   .option('--auto-add', 'Automatically add discovered feeds (non-interactive)')
   .option('--no-confirm', 'Skip confirmation prompts')

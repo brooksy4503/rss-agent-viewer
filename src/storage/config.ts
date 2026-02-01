@@ -8,7 +8,6 @@ export interface Config {
   cacheTTL: number;
   discoveryTimeout: number;
   maxBlogs: number;
-  webSearchProvider: 'agent' | 'exa';
   exaApiKey?: string;
   exaApiUrl?: string;
   maxWebResults?: number;
@@ -22,7 +21,6 @@ const BASE_CONFIG: Config = {
   cacheTTL: 300000,
   discoveryTimeout: 10000,
   maxBlogs: 5,
-  webSearchProvider: 'agent',
   exaApiKey: undefined,
   exaApiUrl: 'https://api.exa.ai/search',
   maxWebResults: 10,
@@ -43,11 +41,6 @@ function applyEnvOverrides(config: Config): Config {
   const maxWebResults = parseEnvNumber(process.env.RSS_VIEWER_MAX_WEB_RESULTS);
   const searchResultsLimit = parseEnvNumber(process.env.RSS_VIEWER_SEARCH_LIMIT);
 
-  const webSearchProvider = process.env.RSS_VIEWER_SEARCH_PROVIDER;
-  const validProvider = (webSearchProvider === 'agent' || webSearchProvider === 'exa') 
-    ? webSearchProvider 
-    : config.webSearchProvider;
-
   return {
     ...config,
     databasePath: process.env.RSS_VIEWER_DB_PATH || config.databasePath,
@@ -55,7 +48,6 @@ function applyEnvOverrides(config: Config): Config {
     cacheTTL: cacheTTL ?? config.cacheTTL,
     discoveryTimeout: discoveryTimeout ?? config.discoveryTimeout,
     maxBlogs: maxBlogs ?? config.maxBlogs,
-    webSearchProvider: validProvider,
     exaApiKey: process.env.EXA_API_KEY || config.exaApiKey,
     exaApiUrl: process.env.EXA_API_URL || config.exaApiUrl,
     maxWebResults: maxWebResults ?? config.maxWebResults,

@@ -314,7 +314,7 @@ export async function handleRead(url: string | undefined, options: any) {
 }
 
 export async function handleSearch(query: string, options: any) {
-  if (options.web || options.provider) {
+  if (options.web) {
     await handleDiscoverSearch(query, options);
     return;
   }
@@ -343,17 +343,15 @@ export async function handleDiscoverSearch(query: string, options: any) {
   const cache = getDiscoveryCache();
   const config = getConfig();
 
-  const provider = (options.provider || config.webSearchProvider) as 'agent' | 'exa';
-
-  if (provider === 'exa' && !config.exaApiKey) {
-    console.log(chalk.dim('Exa API key not found, falling back to agent search'));
+  if (!config.exaApiKey) {
+    console.log(chalk.red('Exa API key is required for web search. Please add it to your config or set EXA_API_KEY environment variable.'));
+    return;
   }
 
   console.log(chalk.dim(`Searching web for: "${query}"`));
   const webSearch = new WebSearch(config);
 
   const searchResults = await webSearch.search(query, {
-    provider,
     maxResults: options.maxResults ? parseInt(options.maxResults) : config.maxWebResults
   });
 

@@ -4,20 +4,14 @@ export class WebSearch {
   constructor(private config: Config) {}
 
   async search(query: string, options: WebSearchOptions): Promise<WebSearchResponse> {
-    const provider = options.provider || this.config.webSearchProvider;
-
-    if (provider === 'exa' && this.config.exaApiKey) {
-      return this.searchWithExa(query, options);
-    } else {
-      return this.searchWithAgent(query, options);
-    }
+    return this.searchWithExa(query, options);
   }
 
   private async searchWithExa(query: string, options: WebSearchOptions): Promise<WebSearchResponse> {
     const apiKey = options.apiKey || this.config.exaApiKey;
 
     if (!apiKey) {
-      throw new Error('Exa API key is required for provider=exa');
+      throw new Error('Exa API key is required. Please add it to your config or set EXA_API_KEY environment variable.');
     }
 
     const apiUrl = options.apiUrl || this.config.exaApiUrl || 'https://api.exa.ai/search';
@@ -54,14 +48,6 @@ export class WebSearch {
       results: this.filterUrlsForFeeds(results),
       query,
       provider: 'exa'
-    };
-  }
-
-  private async searchWithAgent(query: string, options: WebSearchOptions): Promise<WebSearchResponse> {
-    return {
-      results: [],
-      query,
-      provider: 'agent'
     };
   }
 
