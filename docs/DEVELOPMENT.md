@@ -121,3 +121,94 @@ Suggested verification:
 - Global installs of `rss-agent-discovery` may ship a bin script that cannot locate the `dist` folder; use `RSS_DISCOVER_PATH` to work around.
 - Progress indicators are limited for long-running operations.
 - Cache refresh is not implemented (`rss-viewer cache refresh`).
+
+## Search Architecture
+
+### Local Search
+
+Uses SQLite FTS5 (Full-Text Search) for fast text-based queries.
+
+**Features:**
+- BM25 ranking for relevance scoring
+- Supports phrase matching (`"exact phrase"`)
+- Supports exclusion (`-term`)
+- Filters by date, author, category
+
+**Example:**
+```typescript
+const articles = database.searchArticlesWithRelevance('Rust programming', {
+  limit: 20,
+  since: new Date('2024-01-01'),
+  category: 'Tech'
+});
+```
+
+### Web Search
+
+Two providers available:
+
+#### Agent Search (Default)
+- Returns empty results
+- Agent calls web search separately
+- No API costs
+
+#### Exa API (BYOK)
+- Semantic search via Exa API
+- Requires `EXA_API_KEY`
+- Better for discovering relevant feeds
+
+**Workflow:**
+```
+1. User queries: "React 19 features"
+2. Agent calls: rss-viewer discover-search "React 19 features" --web --auto-add --read
+3. Tool:
+   - Searches web (Exa or agent)
+   - Filters URLs for feed candidates
+   - Discovers feeds from each URL (rss-agent-discovery)
+   - Adds feeds to database (if --auto-add)
+   - Fetches articles from new feeds (if --read)
+   - Searches local database for query
+   - Returns ranked results
+```
+
+### URL Filtering
+
+Web search results are filtered to:
+- Remove duplicates
+- Filter out non-content files (images, videos, PDFs)
+- Prioritize blog/article URLs
+
+**Blocked Extensions:**
+- `.jpg`, `.png`, `.gif` - Images
+- `.pdf` - PDF documents
+- `.zip` - Archives
+- `.mp4`, `.avi`, `.mov`, `.webm` - Videos
+
+### BYOK (Bring Your Own Key)
+
+Exa API integration is optional:
+- API key stored in config file or environment variable
+- Env vars override config file
+- No API key stored in code
+- Tool works without it (falls back to agent search)
+
+**Environment Variables:**
+```bash
+EXA_API_KEY="your-api-key"                    # Exa API key (optional)
+RSS_VIEWER_SEARCH_PROVIDER="agent|exa"        # Search provider (default: agent)
+RSS_VIEWER_MAX_WEB_RESULTS=10                 # Max web search results
+RSS_VIEWER_SEARCH_LIMIT=20                    # Max article results
+RSS_VIEWER_BOOST_RECENT=false                # Boost recent articles in search
+EXA_API_URL="https://api.exa.ai/search"      # Custom Exa endpoint (optional)
+```
+
+**Config File (~/.config/rss-viewer/config.json):**
+```json
+{
+  "webSearchProvider": "exa",
+  "exaApiKey": "your-api-key",
+  "maxWebResults": 10,
+  "searchResultsLimit": 20,
+  "boostRecentSearch": false
+}
+```

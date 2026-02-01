@@ -8,14 +8,26 @@ export interface Config {
   cacheTTL: number;
   discoveryTimeout: number;
   maxBlogs: number;
+  webSearchProvider: 'agent' | 'exa';
+  exaApiKey?: string;
+  exaApiUrl?: string;
+  maxWebResults?: number;
+  searchResultsLimit?: number;
+  boostRecentSearch?: boolean;
 }
 
 const BASE_CONFIG: Config = {
   databasePath: join(homedir(), '.config', 'rss-viewer', 'feeds.db'),
   configPath: join(homedir(), '.config', 'rss-viewer', 'config.json'),
-  cacheTTL: 300000, // 5 minutes (ms)
+  cacheTTL: 300000,
   discoveryTimeout: 10000,
-  maxBlogs: 5
+  maxBlogs: 5,
+  webSearchProvider: 'agent',
+  exaApiKey: undefined,
+  exaApiUrl: 'https://api.exa.ai/search',
+  maxWebResults: 10,
+  searchResultsLimit: 20,
+  boostRecentSearch: false
 };
 
 function parseEnvNumber(value: string | undefined): number | undefined {
@@ -28,6 +40,13 @@ function applyEnvOverrides(config: Config): Config {
   const cacheTTL = parseEnvNumber(process.env.RSS_VIEWER_CACHE_TTL);
   const discoveryTimeout = parseEnvNumber(process.env.RSS_DISCOVER_TIMEOUT);
   const maxBlogs = parseEnvNumber(process.env.RSS_DISCOVER_MAX_BLOGS);
+  const maxWebResults = parseEnvNumber(process.env.RSS_VIEWER_MAX_WEB_RESULTS);
+  const searchResultsLimit = parseEnvNumber(process.env.RSS_VIEWER_SEARCH_LIMIT);
+
+  const webSearchProvider = process.env.RSS_VIEWER_SEARCH_PROVIDER;
+  const validProvider = (webSearchProvider === 'agent' || webSearchProvider === 'exa') 
+    ? webSearchProvider 
+    : config.webSearchProvider;
 
   return {
     ...config,
@@ -35,7 +54,13 @@ function applyEnvOverrides(config: Config): Config {
     configPath: process.env.RSS_VIEWER_CONFIG_PATH || config.configPath,
     cacheTTL: cacheTTL ?? config.cacheTTL,
     discoveryTimeout: discoveryTimeout ?? config.discoveryTimeout,
-    maxBlogs: maxBlogs ?? config.maxBlogs
+    maxBlogs: maxBlogs ?? config.maxBlogs,
+    webSearchProvider: validProvider,
+    exaApiKey: process.env.EXA_API_KEY || config.exaApiKey,
+    exaApiUrl: process.env.EXA_API_URL || config.exaApiUrl,
+    maxWebResults: maxWebResults ?? config.maxWebResults,
+    searchResultsLimit: searchResultsLimit ?? config.searchResultsLimit,
+    boostRecentSearch: process.env.RSS_VIEWER_BOOST_RECENT === 'true' || config.boostRecentSearch
   };
 }
 

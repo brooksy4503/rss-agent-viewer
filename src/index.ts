@@ -10,6 +10,7 @@ import {
   handleRemove,
   handleRead,
   handleSearch,
+  handleDiscoverSearch,
   handleImport,
   handleExport,
   handleCache,
@@ -72,11 +73,33 @@ program
 
 program
   .command('search <query>')
-  .description('Search across all feeds')
+  .description('Search articles in database or web')
+  .option('--local', 'Search local database only (default)')
+  .option('--web', 'Search web for new feeds')
+  .option('--provider <provider>', 'Search provider: agent or exa', 'agent')
+  .option('--max-results <n>', 'Max web search results', '10')
+  .option('--auto-add', 'Automatically add discovered feeds')
+  .option('--no-confirm', 'Skip confirmation prompts')
+  .option('--category <name>', 'Feed category')
+  .option('--read', 'Fetch articles from new feeds')
   .option('--limit <n>', 'Maximum number of articles', '20')
   .option('--since <date>', 'Show articles newer than date')
+  .option('--author <name>', 'Filter by author')
   .option('--tag <tag>', 'Filter by tag/category')
   .action(handleSearch);
+
+program
+  .command('discover-search <query>')
+  .description('Search web, discover feeds, add, and search articles')
+  .option('--provider <provider>', 'Search provider: agent or exa', 'agent')
+  .option('--max-results <n>', 'Max web search results', '10')
+  .option('--auto-add', 'Automatically add discovered feeds (non-interactive)')
+  .option('--no-confirm', 'Skip confirmation prompts')
+  .option('--category <name>', 'Feed category', 'General')
+  .option('--read', 'Fetch and display articles from new feeds')
+  .option('--limit <n>', 'Max articles to display', '20')
+  .option('--timeout <ms>', 'Discovery timeout in milliseconds', '10000')
+  .action(handleDiscoverSearch);
 
 program
   .command('import <file>')

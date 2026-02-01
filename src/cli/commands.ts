@@ -1,13 +1,14 @@
 import { join } from 'node:path';
 import { existsSync } from 'node:fs';
 import chalk from 'chalk';
-import { FeedDatabase } from '../storage/database.js';
+import { FeedDatabase, type RankedArticle } from '../storage/database.js';
 import { DiscoveryCache } from '../core/cache.js';
 import { parseFeed, getFeedType } from '../core/parser.js';
 import { parseOPML, generateOPML, importOPMLFile } from '../core/opml.js';
 import { initConfig, loadConfig } from '../storage/config.js';
 import type { Config } from '../storage/config.js';
 import { formatFeedsTable } from '../utils/formatter.js';
+import { WebSearch } from '../core/websearch/index.js';
 
 let db: FeedDatabase | null = null;
 let discoveryCache: DiscoveryCache | null = null;
@@ -313,6 +314,11 @@ export async function handleRead(url: string | undefined, options: any) {
 }
 
 export async function handleSearch(query: string, options: any) {
+  if (options.web || options.provider) {
+    await handleDiscoverSearch(query, options);
+    return;
+  }
+
   const database = getDatabase();
 
   const filters: any = {};
@@ -321,7 +327,7 @@ export async function handleSearch(query: string, options: any) {
   if (options.author) filters.author = options.author;
   if (options.tag) filters.category = options.tag;
 
-  const articles = database.filterArticles(filters);
+  const articles = database.searchArticlesWithRelevance(query, filters);
 
   if (articles.length === 0) {
     console.log(chalk.yellow(`No articles found for: "${query}"`));
@@ -329,7 +335,135 @@ export async function handleSearch(query: string, options: any) {
   }
 
   console.log(`\n${chalk.bold(`Search results for: "${query}"`)}\n`);
-  displayArticles(articles);
+  displayRankedArticles(articles);
+}
+
+export async function handleDiscoverSearch(query: string, options: any) {
+  const database = getDatabase();
+  const cache = getDiscoveryCache();
+  const config = getConfig();
+
+  const provider = (options.provider || config.webSearchProvider) as 'agent' | 'exa';
+
+  if (provider === 'exa' && !config.exaApiKey) {
+    console.log(chalk.dim('Exa API key not found, falling back to agent search'));
+  }
+
+  console.log(chalk.dim(`Searching web for: "${query}"`));
+  const webSearch = new WebSearch(config);
+
+  const searchResults = await webSearch.search(query, {
+    provider,
+    maxResults: options.maxResults ? parseInt(options.maxResults) : config.maxWebResults
+  });
+
+  if (searchResults.results.length === 0) {
+    console.log(chalk.yellow('○ No web search results found'));
+    return;
+  }
+
+  console.log(chalk.dim(`Found ${searchResults.results.length} URL(s)`));
+
+  let discoveredFeeds: any[] = [];
+  const { discoverFeeds } = await import('../core/discovery.js');
+
+  for (const result of searchResults.results) {
+    console.log(chalk.dim(`Discovering feeds from: ${result.url}`));
+
+    const cached = cache.get(result.url);
+    let feeds: any[] = [];
+
+    if (cached) {
+      feeds = cached.results[0]?.feeds || [];
+      console.log(chalk.dim('  Using cached discovery'));
+    } else {
+      const discovery = await discoverFeeds(result.url, {
+        timeout: options.timeout ? parseInt(options.timeout) : config.discoveryTimeout,
+        skipBlogs: false,
+        maxBlogs: config.maxBlogs,
+        verbose: false
+      });
+
+      if (discovery.success) {
+        feeds = discovery.results[0]?.feeds || [];
+        cache.set(result.url, discovery);
+      }
+    }
+
+    discoveredFeeds.push(...feeds);
+  }
+
+  const uniqueFeeds = Array.from(
+    new Map(discoveredFeeds.map(f => [f.url, f])).values()
+  );
+
+  if (uniqueFeeds.length === 0) {
+    console.log(chalk.yellow('○ No RSS feeds found from web results'));
+    return;
+  }
+
+  console.log(chalk.green(`✓ Found ${uniqueFeeds.length} unique feed(s)`));
+
+  if (options.autoAdd) {
+    const category = options.category || 'General';
+
+    for (const feed of uniqueFeeds) {
+      try {
+        database.addFeed({
+          url: feed.url,
+          title: feed.title,
+          link: feed.url,
+          type: feed.type === 'unknown' ? 'rss' : feed.type,
+          category
+        });
+        console.log(chalk.dim(`  ✓ Added: ${feed.title}`));
+      } catch (error) {
+        console.log(chalk.dim(`  ✗ Failed: ${feed.url}`));
+      }
+    }
+
+    console.log(chalk.green(`✓ Added ${uniqueFeeds.length} feed(s) to database`));
+  }
+
+  if (options.read) {
+    const limit = options.limit ? parseInt(options.limit) : 20;
+
+    for (const feed of uniqueFeeds) {
+      const dbFeed = database.getFeedByUrl(feed.url);
+      if (!dbFeed) continue;
+
+      console.log(chalk.dim(`Fetching articles from: ${feed.title}`));
+
+      try {
+        const parsed = await parseFeed(feed.url);
+
+        for (const item of parsed.items) {
+          database.addArticle({
+            feedId: dbFeed.id,
+            title: item.title,
+            link: item.link,
+            content: item.content,
+            summary: item.contentSnippet,
+            author: item.author,
+            publishedAt: item.pubDate ? item.pubDate.toISOString() : new Date().toISOString(),
+            readAt: null
+          });
+        }
+      } catch (error) {
+        console.log(chalk.dim(`  ✗ Failed to fetch: ${feed.title}`));
+      }
+    }
+  }
+
+  const searchLimit = options.limit ? parseInt(options.limit) : config.searchResultsLimit;
+  const articles = database.searchArticlesWithRelevance(query, {
+    limit: searchLimit
+  });
+
+  console.log(`\n${chalk.bold(`Search results for: "${query}"`)}\n`);
+  displayRankedArticles(articles);
+
+  if (db) db.close();
 }
 
 function displayArticles(articles: any[]) {
@@ -343,6 +477,24 @@ function displayArticles(articles: any[]) {
     const readStatus = article.readAt ? chalk.green('✓') : chalk.dim('○');
 
     console.log(`\n${chalk.bold(`${index + 1}. ${article.title}`)}`);
+    console.log(chalk.dim(`   ${article.link}`));
+    console.log(chalk.dim(`   Published: ${published}  ${readStatus}`));
+  });
+
+  console.log(chalk.dim(`\nTotal: ${articles.length} articles`));
+}
+
+function displayRankedArticles(articles: RankedArticle[]) {
+  if (articles.length === 0) {
+    console.log(chalk.yellow('No articles found.'));
+    return;
+  }
+
+  articles.forEach((article: any, index: number) => {
+    const published = article.publishedAt ? new Date(article.publishedAt).toLocaleDateString() : 'Unknown';
+    const readStatus = article.readAt ? chalk.green('✓') : chalk.dim('○');
+
+    console.log(`\n${chalk.bold(`${index + 1}. ${article.title}`)} ${chalk.dim(`(score: ${article.relevanceScore})`)}`);
     console.log(chalk.dim(`   ${article.link}`));
     console.log(chalk.dim(`   Published: ${published}  ${readStatus}`));
   });

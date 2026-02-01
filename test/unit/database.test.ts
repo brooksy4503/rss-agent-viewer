@@ -158,4 +158,176 @@ describe('Database', () => {
 
     db.close();
   });
+
+  it('should search articles with relevance using FTS', () => {
+    const db = new FeedDatabase(testDbPath);
+
+    const feedId = db.addFeed({
+      url: 'https://example.com/rss',
+      title: 'Example Feed',
+      link: 'https://example.com',
+      type: 'rss',
+      category: 'Tech'
+    });
+
+    db.addArticle({
+      feedId,
+      title: 'Rust Programming Guide',
+      link: 'https://example.com/article1',
+      content: 'Learn Rust programming language basics',
+      summary: 'Introduction to Rust',
+      author: 'John Doe',
+      publishedAt: '2024-01-01T00:00:00.000Z',
+      readAt: null
+    });
+
+    db.addArticle({
+      feedId,
+      title: 'JavaScript Best Practices',
+      link: 'https://example.com/article2',
+      content: 'Modern JavaScript techniques',
+      summary: 'JS tips and tricks',
+      author: 'Jane Smith',
+      publishedAt: '2024-01-02T00:00:00.000Z',
+      readAt: null
+    });
+
+    const results = db.searchArticlesWithRelevance('Rust', {
+      limit: 10
+    });
+
+    expect(results).toHaveLength(1);
+    expect(results[0].title).toBe('Rust Programming Guide');
+    expect(results[0].relevanceScore).toBeDefined();
+
+    db.close();
+  });
+
+  it('should handle quoted phrases in search', () => {
+    const db = new FeedDatabase(testDbPath);
+
+    const feedId = db.addFeed({
+      url: 'https://example.com/rss',
+      title: 'Example Feed',
+      link: 'https://example.com',
+      type: 'rss',
+      category: 'Tech'
+    });
+
+    db.addArticle({
+      feedId,
+      title: 'Introduction to Machine Learning',
+      link: 'https://example.com/article1',
+      content: 'Machine learning basics',
+      summary: 'ML overview',
+      author: 'Alice',
+      publishedAt: '2024-01-01T00:00:00.000Z',
+      readAt: null
+    });
+
+    const results = db.searchArticlesWithRelevance('"Machine Learning"', {
+      limit: 10
+    });
+
+    expect(results).toHaveLength(1);
+    expect(results[0].title).toBe('Introduction to Machine Learning');
+
+    db.close();
+  });
+
+  it('should filter articles by date', () => {
+    const db = new FeedDatabase(testDbPath);
+
+    const feedId = db.addFeed({
+      url: 'https://example.com/rss',
+      title: 'Example Feed',
+      link: 'https://example.com',
+      type: 'rss',
+      category: 'Tech'
+    });
+
+    db.addArticle({
+      feedId,
+      title: 'Old Article',
+      link: 'https://example.com/article1',
+      content: 'Old content',
+      summary: 'Old summary',
+      author: 'Author',
+      publishedAt: '2024-01-01T00:00:00.000Z',
+      readAt: null
+    });
+
+    db.addArticle({
+      feedId,
+      title: 'New Article',
+      link: 'https://example.com/article2',
+      content: 'New content',
+      summary: 'New summary',
+      author: 'Author',
+      publishedAt: '2024-02-01T00:00:00.000Z',
+      readAt: null
+    });
+
+    const results = db.searchArticlesWithRelevance('Article', {
+      limit: 10,
+      since: new Date('2024-01-15T00:00:00.000Z')
+    });
+
+    expect(results).toHaveLength(1);
+    expect(results[0].title).toBe('New Article');
+
+    db.close();
+  });
+
+  it('should filter articles by category', () => {
+    const db = new FeedDatabase(testDbPath);
+
+    const techFeedId = db.addFeed({
+      url: 'https://example.com/rss',
+      title: 'Tech Feed',
+      link: 'https://example.com',
+      type: 'rss',
+      category: 'Tech'
+    });
+
+    const newsFeedId = db.addFeed({
+      url: 'https://news.com/rss',
+      title: 'News Feed',
+      link: 'https://news.com',
+      type: 'rss',
+      category: 'News'
+    });
+
+    db.addArticle({
+      feedId: techFeedId,
+      title: 'Tech Article',
+      link: 'https://example.com/article1',
+      content: 'Tech content',
+      summary: 'Tech summary',
+      author: 'Author',
+      publishedAt: '2024-01-01T00:00:00.000Z',
+      readAt: null
+    });
+
+    db.addArticle({
+      feedId: newsFeedId,
+      title: 'News Article',
+      link: 'https://news.com/article1',
+      content: 'News content',
+      summary: 'News summary',
+      author: 'Author',
+      publishedAt: '2024-01-02T00:00:00.000Z',
+      readAt: null
+    });
+
+    const results = db.searchArticlesWithRelevance('Article', {
+      limit: 10,
+      category: 'Tech'
+    });
+
+    expect(results).toHaveLength(1);
+    expect(results[0].title).toBe('Tech Article');
+
+    db.close();
+  });
 });

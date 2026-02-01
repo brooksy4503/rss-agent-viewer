@@ -28,6 +28,18 @@ export interface Article {
   createdAt: string;
 }
 
+export interface RankedArticle extends Article {
+  relevanceScore: number;
+}
+
+export interface SearchOptions {
+  limit?: number;
+  offset?: number;
+  since?: Date;
+  author?: string;
+  category?: string;
+}
+
 export interface Cache {
   key: string;
   value: Buffer;
@@ -159,6 +171,42 @@ export class FeedDatabase {
             )
           `);
         }
+      },
+      {
+        version: 2,
+        description: 'Add full-text search with FTS5',
+        up: (db: DatabaseType) => {
+          db.exec(`
+            CREATE VIRTUAL TABLE IF NOT EXISTS articles_fts USING fts5(
+              title,
+              summary,
+              content,
+              content=articles,
+              content_rowid=rowid
+            )
+          `);
+
+          db.exec(`
+            CREATE TRIGGER IF NOT EXISTS articles_ai AFTER INSERT ON articles BEGIN
+              INSERT INTO articles_fts(rowid, title, summary, content)
+              VALUES (new.rowid, new.title, new.summary, new.content);
+            END
+          `);
+
+          db.exec(`
+            CREATE TRIGGER IF NOT EXISTS articles_ad AFTER DELETE ON articles BEGIN
+              DELETE FROM articles_fts WHERE rowid = old.rowid;
+            END
+          `);
+
+          db.exec(`
+            CREATE TRIGGER IF NOT EXISTS articles_au AFTER UPDATE ON articles BEGIN
+              DELETE FROM articles_fts WHERE rowid = old.rowid;
+              INSERT INTO articles_fts(rowid, title, summary, content)
+              VALUES (new.rowid, new.title, new.summary, new.content);
+            END
+          `);
+        }
       }
     ];
   }
@@ -246,6 +294,60 @@ export class FeedDatabase {
     `);
     const searchTerm = `%${query}%`;
     return stmt.all(searchTerm, searchTerm, searchTerm, limit) as Article[];
+  }
+
+  searchArticlesWithRelevance(query: string, options: SearchOptions): RankedArticle[] {
+    const ftsQuery = this.buildFTSQuery(query);
+    const params: any[] = [ftsQuery];
+
+    let whereClause = '';
+    let joinClause = '';
+
+    if (options.since) {
+      whereClause += ' AND a.published_at >= ?';
+      params.push(options.since.toISOString());
+    }
+
+    if (options.author) {
+      whereClause += ' AND a.author LIKE ?';
+      params.push(`%${options.author}%`);
+    }
+
+    if (options.category) {
+      joinClause = 'JOIN feeds f ON a.feed_id = f.id';
+      whereClause += ' AND f.category = ?';
+      params.push(options.category);
+    }
+
+    const limit = options.limit || 20;
+    const offset = options.offset || 0;
+
+    const stmt = this.db.prepare(`
+      SELECT a.*, bm25(articles_fts) as relevanceScore
+      FROM articles a
+      JOIN articles_fts ON a.rowid = articles_fts.rowid
+      ${joinClause}
+      WHERE articles_fts MATCH ?
+      ${whereClause}
+      ORDER BY relevanceScore
+      LIMIT ? OFFSET ?
+    `);
+
+    return stmt.all(...params, limit, offset) as RankedArticle[];
+  }
+
+  private buildFTSQuery(query: string): string {
+    const terms = query.match(/"([^"]+)"|([^\s]+)/g) || [];
+    const processedTerms = terms.map(term => {
+      if (term.startsWith('"') && term.endsWith('"')) {
+        return term;
+      }
+      if (term.startsWith('-')) {
+        return `${term} *`;
+      }
+      return term;
+    });
+    return processedTerms.join(' ');
   }
 
   filterArticles(options: { limit?: number; since?: Date; author?: string; category?: string }): Article[] {
