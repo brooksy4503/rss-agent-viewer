@@ -74,10 +74,11 @@ export async function handleAdd(url: string, options: { discover?: boolean; cate
     } else {
       const { discoverFeeds } = await import('../core/discovery.js');
 
-      const result = discoverFeeds(url, {
+      const result = await discoverFeeds(url, {
         timeout: settings.discoveryTimeout,
         skipBlogs: false,
-        maxBlogs: settings.maxBlogs
+        maxBlogs: settings.maxBlogs,
+        verbose: false
       });
 
       if (result.success && result.results[0]?.feeds?.length > 0) {
@@ -139,10 +140,10 @@ export async function handleDiscover(url: string, options: { timeout?: number; s
 
   const { discoverFeeds } = await import('../core/discovery.js');
 
-  const result = discoverFeeds(url, {
-    timeout: options.timeout || settings.discoveryTimeout,
+  const result = await discoverFeeds(url, {
+    timeout: typeof options.timeout === 'number' ? options.timeout : settings.discoveryTimeout,
     skipBlogs: options.skipBlogs,
-    maxBlogs: options.maxBlogs || settings.maxBlogs,
+    maxBlogs: typeof options.maxBlogs === 'number' ? options.maxBlogs : settings.maxBlogs,
     verbose: false
   });
 
