@@ -14,6 +14,18 @@ Or run without installation:
 npx rss-viewer
 ```
 
+### Agent Skills
+
+Install the `skills/rss-agent-viewer` skill with the Skills CLI:
+
+```bash
+npx skills add <owner/repo>
+# example:
+npx skills add brooksy4503/rss-agent-viewer
+```
+
+More info about the Skills CLI: https://skills.sh/
+
 ## Quick Start
 
 ```bash
