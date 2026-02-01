@@ -1,0 +1,97 @@
+#!/usr/bin/env node
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { Command } from 'commander';
+import {
+  handleInit,
+  handleAdd,
+  handleDiscover,
+  handleFeeds,
+  handleRemove,
+  handleRead,
+  handleSearch,
+  handleImport,
+  handleExport,
+  handleCache,
+} from './cli/commands.js';
+
+let __dirname: string;
+try {
+  __dirname = path.dirname(fileURLToPath(import.meta.url));
+} catch {
+  __dirname = path.dirname(process.execPath);
+}
+
+const program = new Command();
+
+program
+  .name('rss-viewer')
+  .description('CLI RSS/Atom feed viewer with automatic feed discovery')
+  .version('0.1.0');
+
+program
+  .command('init')
+  .description('Initialize configuration and database')
+  .action(handleInit);
+
+program
+  .command('add <url>')
+  .description('Add a feed to database')
+  .option('--discover', 'Auto-discover feeds from URL')
+  .option('--category <name>', 'Feed category')
+  .action(handleAdd);
+
+program
+  .command('discover <url>')
+  .description('Discover feeds from a URL')
+  .option('--timeout <ms>', 'Discovery timeout in milliseconds', '10000')
+  .option('--skip-blogs', 'Skip blog scanning')
+  .option('--max-blogs <n>', 'Maximum blog paths to scan', '5')
+  .action(handleDiscover);
+
+program
+  .command('feeds')
+  .description('List all subscribed feeds')
+  .action(handleFeeds);
+
+program
+  .command('remove <url>')
+  .description('Remove a feed by URL')
+  .action(handleRemove);
+
+program
+  .command('read [url]')
+  .description('Read articles from a feed or all feeds')
+  .option('--all', 'Read from all feeds')
+  .option('--limit <n>', 'Maximum number of articles', '20')
+  .option('--since <date>', 'Show articles newer than date')
+  .option('--author <name>', 'Filter by author')
+  .option('--tag <tag>', 'Filter by tag/category')
+  .option('--reverse', 'Show oldest articles first')
+  .action(handleRead);
+
+program
+  .command('search <query>')
+  .description('Search across all feeds')
+  .option('--limit <n>', 'Maximum number of articles', '20')
+  .option('--since <date>', 'Show articles newer than date')
+  .option('--tag <tag>', 'Filter by tag/category')
+  .action(handleSearch);
+
+program
+  .command('import <file>')
+  .description('Import feeds from OPML file')
+  .action(handleImport);
+
+program
+  .command('export')
+  .description('Export feeds to OPML or JSON')
+  .option('--fmt <format>', 'Output format (opml|json)', 'opml')
+  .action(handleExport);
+
+program
+  .command('cache <action>')
+  .description('Manage cache (stats, clear, refresh)')
+  .action(handleCache);
+
+program.parse(process.argv);
