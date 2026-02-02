@@ -16,12 +16,10 @@ npx rss-viewer
 
 ### Agent Skills
 
-Install the `skills/rss-agent-viewer` skill with the Skills CLI:
+Install the AI agent skill with Skills CLI:
 
 ```bash
-npx skills add <owner/repo>
-# example:
-npx skills add brooksy4503/rss-agent-viewer
+npx skills add brooksy4503/rss-agent-viewer --skill rss-agent-viewer
 ```
 
 More info about the Skills CLI: https://skills.sh/
