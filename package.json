@@ -1,6 +1,6 @@
 {
   "name": "rss-agent-viewer",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "CLI RSS/Atom feed viewer with automatic feed discovery (bundled)",
   "main": "dist/index.js",
   "type": "module",
