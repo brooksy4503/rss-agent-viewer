@@ -14,6 +14,15 @@ let db: FeedDatabase | null = null;
 let discoveryCache: DiscoveryCache | null = null;
 let config: Config | null = null;
 
+async function fetchFeedTitle(feedUrl: string): Promise<string | null> {
+  try {
+    const parsed = await parseFeed(feedUrl);
+    return parsed.title;
+  } catch {
+    return null;
+  }
+}
+
 function getConfig(): Config {
   if (!config) {
     config = loadConfig();
@@ -92,15 +101,16 @@ export async function handleAdd(url: string, options: { discover?: boolean; cate
       }
     }
 
-    if (discoveredFeeds.length > 0) {
-      feedUrl = discoveredFeeds[0].url;
-      feedTitle = discoveredFeeds[0].title || url;
-      feedType = discoveredFeeds[0].type === 'unknown' ? 'rss' : discoveredFeeds[0].type;
+  if (discoveredFeeds.length > 0) {
+    feedUrl = discoveredFeeds[0].url;
+    const realTitle = await fetchFeedTitle(feedUrl);
+    feedTitle = realTitle || discoveredFeeds[0].title || url;
+    feedType = discoveredFeeds[0].type === 'unknown' ? 'rss' : discoveredFeeds[0].type;
 
-      console.log(chalk.dim(`  Using: ${feedUrl}`));
-      console.log(chalk.dim(`  Title: ${feedTitle}`));
-      console.log(chalk.dim(`  Type: ${feedType}`));
-    }
+    console.log(chalk.dim(`  Using: ${feedUrl}`));
+    console.log(chalk.dim(`  Title: ${feedTitle}`));
+    console.log(chalk.dim(`  Type: ${feedType}`));
+  }
   }
 
   const category = options.category || 'General';
@@ -321,21 +331,25 @@ export async function handleSearch(query: string, options: any) {
 
   const database = getDatabase();
 
-  const filters: any = {};
-  if (options.limit) filters.limit = parseInt(options.limit);
-  if (options.since) filters.since = new Date(options.since);
-  if (options.author) filters.author = options.author;
-  if (options.tag) filters.category = options.tag;
+  try {
+    const filters: any = {};
+    if (options.limit) filters.limit = parseInt(options.limit);
+    if (options.since) filters.since = new Date(options.since);
+    if (options.author) filters.author = options.author;
+    if (options.tag) filters.category = options.tag;
 
-  const articles = database.searchArticlesWithRelevance(query, filters);
+    const articles = database.searchArticlesWithRelevance(query, filters);
 
-  if (articles.length === 0) {
-    console.log(chalk.yellow(`No articles found for: "${query}"`));
-    return;
+    if (articles.length === 0) {
+      console.log(chalk.yellow(`No articles found for: "${query}"`));
+      return;
+    }
+
+    console.log(`\n${chalk.bold(`Search results for: "${query}"`)}\n`);
+    displayRankedArticles(articles);
+  } finally {
+    if (db) db.close();
   }
-
-  console.log(`\n${chalk.bold(`Search results for: "${query}"`)}\n`);
-  displayRankedArticles(articles);
 }
 
 export async function handleDiscoverSearch(query: string, options: any) {
@@ -343,125 +357,130 @@ export async function handleDiscoverSearch(query: string, options: any) {
   const cache = getDiscoveryCache();
   const config = getConfig();
 
-  if (!config.exaApiKey) {
-    console.log(chalk.red('Exa API key is required for web search. Please add it to your config or set EXA_API_KEY environment variable.'));
-    return;
-  }
-
-  console.log(chalk.dim(`Searching web for: "${query}"`));
-  const webSearch = new WebSearch(config);
-
-  const searchResults = await webSearch.search(query, {
-    maxResults: options.maxResults ? parseInt(options.maxResults) : config.maxWebResults
-  });
-
-  if (searchResults.results.length === 0) {
-    console.log(chalk.yellow('○ No web search results found'));
-    return;
-  }
-
-  console.log(chalk.dim(`Found ${searchResults.results.length} URL(s)`));
-
-  let discoveredFeeds: any[] = [];
-  const { discoverFeeds } = await import('../core/discovery.js');
-
-  for (const result of searchResults.results) {
-    console.log(chalk.dim(`Discovering feeds from: ${result.url}`));
-
-    const cached = cache.get(result.url);
-    let feeds: any[] = [];
-
-    if (cached) {
-      feeds = cached.results[0]?.feeds || [];
-      console.log(chalk.dim('  Using cached discovery'));
-    } else {
-      const discovery = await discoverFeeds(result.url, {
-        timeout: options.timeout ? parseInt(options.timeout) : config.discoveryTimeout,
-        skipBlogs: false,
-        maxBlogs: config.maxBlogs,
-        verbose: false
-      });
-
-      if (discovery.success) {
-        feeds = discovery.results[0]?.feeds || [];
-        cache.set(result.url, discovery);
-      }
+  try {
+    if (!config.exaApiKey) {
+      console.log(chalk.red('Exa API key is required for web search. Please add it to your config or set EXA_API_KEY environment variable.'));
+      return;
     }
 
-    discoveredFeeds.push(...feeds);
-  }
+    console.log(chalk.dim(`Searching web for: "${query}"`));
+    const webSearch = new WebSearch(config);
 
-  const uniqueFeeds = Array.from(
-    new Map(discoveredFeeds.map(f => [f.url, f])).values()
-  );
+    const searchResults = await webSearch.search(query, {
+      maxResults: options.maxResults ? parseInt(options.maxResults) : config.maxWebResults
+    });
 
-  if (uniqueFeeds.length === 0) {
-    console.log(chalk.yellow('○ No RSS feeds found from web results'));
-    return;
-  }
+    if (searchResults.results.length === 0) {
+      console.log(chalk.yellow('○ No web search results found'));
+      return;
+    }
 
-  console.log(chalk.green(`✓ Found ${uniqueFeeds.length} unique feed(s)`));
+    console.log(chalk.dim(`Found ${searchResults.results.length} URL(s)`));
 
-  if (options.autoAdd) {
-    const category = options.category || 'General';
+    let discoveredFeeds: any[] = [];
+    const { discoverFeeds } = await import('../core/discovery.js');
 
-    for (const feed of uniqueFeeds) {
-      try {
-        database.addFeed({
-          url: feed.url,
-          title: feed.title,
-          link: feed.url,
-          type: feed.type === 'unknown' ? 'rss' : feed.type,
-          category
+    for (const result of searchResults.results) {
+      console.log(chalk.dim(`Discovering feeds from: ${result.url}`));
+
+      const cached = cache.get(result.url);
+      let feeds: any[] = [];
+
+      if (cached) {
+        feeds = cached.results[0]?.feeds || [];
+        console.log(chalk.dim('  Using cached discovery'));
+      } else {
+        const discovery = await discoverFeeds(result.url, {
+          timeout: options.timeout ? parseInt(options.timeout) : config.discoveryTimeout,
+          skipBlogs: false,
+          maxBlogs: config.maxBlogs,
+          verbose: false
         });
-        console.log(chalk.dim(`  ✓ Added: ${feed.title}`));
-      } catch (error) {
-        console.log(chalk.dim(`  ✗ Failed: ${feed.url}`));
-      }
-    }
 
-    console.log(chalk.green(`✓ Added ${uniqueFeeds.length} feed(s) to database`));
-  }
-
-  if (options.read) {
-    const limit = options.limit ? parseInt(options.limit) : 20;
-
-    for (const feed of uniqueFeeds) {
-      const dbFeed = database.getFeedByUrl(feed.url);
-      if (!dbFeed) continue;
-
-      console.log(chalk.dim(`Fetching articles from: ${feed.title}`));
-
-      try {
-        const parsed = await parseFeed(feed.url);
-
-        for (const item of parsed.items) {
-          database.addArticle({
-            feedId: dbFeed.id,
-            title: item.title,
-            link: item.link,
-            content: item.content,
-            summary: item.contentSnippet,
-            author: item.author,
-            publishedAt: item.pubDate ? item.pubDate.toISOString() : new Date().toISOString(),
-            readAt: null
-          });
+        if (discovery.success) {
+          feeds = discovery.results[0]?.feeds || [];
+          cache.set(result.url, discovery);
         }
-      } catch (error) {
-        console.log(chalk.dim(`  ✗ Failed to fetch: ${feed.title}`));
+      }
+
+      discoveredFeeds.push(...feeds);
+    }
+
+    const uniqueFeeds = Array.from(
+      new Map(discoveredFeeds.map(f => [f.url, f])).values()
+    );
+
+    if (uniqueFeeds.length === 0) {
+      console.log(chalk.yellow('○ No RSS feeds found from web results'));
+      return;
+    }
+
+    console.log(chalk.green(`✓ Found ${uniqueFeeds.length} unique feed(s)`));
+
+    if (options.autoAdd) {
+      const category = options.category || 'General';
+
+      for (const feed of uniqueFeeds) {
+        try {
+          const realTitle = await fetchFeedTitle(feed.url);
+          const titleToUse = realTitle || feed.title;
+
+          database.addFeed({
+            url: feed.url,
+            title: titleToUse,
+            link: feed.url,
+            type: feed.type === 'unknown' ? 'rss' : feed.type,
+            category
+          });
+          console.log(chalk.dim(`  ✓ Added: ${titleToUse}`));
+        } catch (error) {
+          console.log(chalk.dim(`  ✗ Failed: ${feed.url}`));
+        }
+      }
+
+      console.log(chalk.green(`✓ Added ${uniqueFeeds.length} feed(s) to database`));
+    }
+
+    if (options.read) {
+      const limit = options.limit ? parseInt(options.limit) : 20;
+
+      for (const feed of uniqueFeeds) {
+        const dbFeed = database.getFeedByUrl(feed.url);
+        if (!dbFeed) continue;
+
+        console.log(chalk.dim(`Fetching articles from: ${feed.title}`));
+
+        try {
+          const parsed = await parseFeed(feed.url);
+
+          for (const item of parsed.items) {
+            database.addArticle({
+              feedId: dbFeed.id,
+              title: item.title,
+              link: item.link,
+              content: item.content,
+              summary: item.contentSnippet,
+              author: item.author,
+              publishedAt: item.pubDate ? item.pubDate.toISOString() : new Date().toISOString(),
+              readAt: null
+            });
+          }
+        } catch (error) {
+          console.log(chalk.dim(`  ✗ Failed to fetch: ${feed.title}`));
+        }
       }
     }
+
+    const searchLimit = options.limit ? parseInt(options.limit) : config.searchResultsLimit;
+    const articles = database.searchArticlesWithRelevance(query, {
+      limit: searchLimit
+    });
+
+    console.log(`\n${chalk.bold(`Search results for: "${query}"`)}\n`);
+    displayRankedArticles(articles);
+  } finally {
+    if (db) db.close();
   }
-
-  const searchLimit = options.limit ? parseInt(options.limit) : config.searchResultsLimit;
-  const articles = database.searchArticlesWithRelevance(query, {
-    limit: searchLimit
-  });
-
-  console.log(`\n${chalk.bold(`Search results for: "${query}"`)}\n`);
-  displayRankedArticles(articles);
-
-  if (db) db.close();
 }
 
 function displayArticles(articles: any[]) {
@@ -529,62 +548,64 @@ export async function handleImport(file: string) {
   } catch (error) {
     console.error(`${chalk.red('✗')} Failed to import: ${error instanceof Error ? error.message : String(error)}`);
     process.exit(1);
-  }
-
-  if (db) {
-    db.close();
+  } finally {
+    if (db) db.close();
   }
 }
 
 export async function handleExport(format: string) {
   const database = getDatabase();
 
-  const feeds = database.getAllFeeds();
+  try {
+    const feeds = database.getAllFeeds();
 
-  if (format === 'json') {
-    console.log(JSON.stringify(feeds, null, 2));
-  } else if (format === 'opml') {
-    const feedsForOPML = feeds.map(feed => ({
-      url: feed.url,
-      title: feed.title,
-      category: feed.category
-    }));
+    if (format === 'json') {
+      console.log(JSON.stringify(feeds, null, 2));
+    } else if (format === 'opml') {
+      const feedsForOPML = feeds.map(feed => ({
+        url: feed.url,
+        title: feed.title,
+        category: feed.category
+      }));
 
-    console.log(generateOPML(feedsForOPML));
-  } else {
-    console.log(chalk.red(`Unknown format: ${format}`));
-    console.log(chalk.dim('Available formats: json, opml'));
-    process.exit(1);
+      console.log(generateOPML(feedsForOPML));
+    } else {
+      console.log(chalk.red(`Unknown format: ${format}`));
+      console.log(chalk.dim('Available formats: json, opml'));
+      process.exit(1);
+    }
+  } finally {
+    if (db) db.close();
   }
 }
 
 export async function handleCache(action: string) {
   const database = getDatabase();
 
-  switch (action) {
-    case 'stats':
-      const stats = database.getCacheStats();
-      console.log(chalk.bold('Cache Statistics:'));
-      console.log(chalk.dim(`  Entries: ${stats.count}`));
-      console.log(chalk.dim(`  Size: ${(stats.size / 1024).toFixed(2)} KB`));
-      break;
+  try {
+    switch (action) {
+      case 'stats':
+        const stats = database.getCacheStats();
+        console.log(chalk.bold('Cache Statistics:'));
+        console.log(chalk.dim(`  Entries: ${stats.count}`));
+        console.log(chalk.dim(`  Size: ${(stats.size / 1024).toFixed(2)} KB`));
+        break;
 
-    case 'clear':
-      database.clearCache();
-      console.log(`${chalk.green('✓')} Cache cleared`);
-      break;
+      case 'clear':
+        database.clearCache();
+        console.log(`${chalk.green('✓')} Cache cleared`);
+        break;
 
-    case 'refresh':
-      console.log(chalk.yellow('Cache refresh not yet implemented'));
-      break;
+      case 'refresh':
+        console.log(chalk.yellow('Cache refresh not yet implemented'));
+        break;
 
-    default:
-      console.log(chalk.red(`Unknown cache action: ${action}`));
-      console.log(chalk.dim('Available actions: stats, clear, refresh'));
-      process.exit(1);
-  }
-
-  if (db) {
-    db.close();
+      default:
+        console.log(chalk.red(`Unknown cache action: ${action}`));
+        console.log(chalk.dim('Available actions: stats, clear, refresh'));
+        process.exit(1);
+    }
+  } finally {
+    if (db) db.close();
   }
 }

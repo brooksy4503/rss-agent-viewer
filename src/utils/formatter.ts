@@ -2,6 +2,7 @@ import type { Article } from '../core/types.js';
 
 interface FeedRow {
   url: string;
+  title: string;
   category: string;
 }
 
@@ -11,17 +12,18 @@ export function formatFeedsTable(feeds: FeedRow[]): string {
   }
 
   const maxUrlLength = Math.max(...feeds.map(f => f.url.length), 30);
+  const maxTitleLength = Math.max(...feeds.map(f => f.title.length), 20);
   const maxCategoryLength = Math.max(...feeds.map(f => f.category.length), 15);
 
-  let output = '┌' + '─'.repeat(maxUrlLength + 2) + '┬' + '─'.repeat(maxCategoryLength + 2) + '┬' + '─'.repeat(10) + '┐\n';
-  output += '│ ' + padRight('Feed', maxUrlLength) + ' │ ' + padRight('Category', maxCategoryLength) + ' │ Articles │\n';
-  output += '├' + '─'.repeat(maxUrlLength + 2) + '┼' + '─'.repeat(maxCategoryLength + 2) + '┼' + '─'.repeat(10) + '┤\n';
+  let output = '┌' + '─'.repeat(maxUrlLength + 2) + '┬' + '─'.repeat(maxTitleLength + 2) + '┬' + '─'.repeat(maxCategoryLength + 2) + '┬' + '─'.repeat(10) + '┐\n';
+  output += '│ ' + padRight('Feed', maxUrlLength) + ' │ ' + padRight('Title', maxTitleLength) + ' │ ' + padRight('Category', maxCategoryLength) + ' │ Articles │\n';
+  output += '├' + '─'.repeat(maxUrlLength + 2) + '┼' + '─'.repeat(maxTitleLength + 2) + '┼' + '─'.repeat(maxCategoryLength + 2) + '┼' + '─'.repeat(10) + '┤\n';
 
   feeds.forEach(feed => {
-    output += '│ ' + padRight(feed.url, maxUrlLength) + ' │ ' + padRight(feed.category, maxCategoryLength) + ' │ ' + padLeft('—', 8) + ' │\n';
+    output += '│ ' + padRight(feed.url, maxUrlLength) + ' │ ' + padRight(feed.title, maxTitleLength) + ' │ ' + padRight(feed.category, maxCategoryLength) + ' │ ' + padLeft('—', 8) + ' │\n';
   });
 
-  output += '└' + '─'.repeat(maxUrlLength + 2) + '┴' + '─'.repeat(maxCategoryLength + 2) + '┴' + '─'.repeat(10) + '┘';
+  output += '└' + '─'.repeat(maxUrlLength + 2) + '┴' + '─'.repeat(maxTitleLength + 2) + '┴' + '─'.repeat(maxCategoryLength + 2) + '┴' + '─'.repeat(10) + '┘';
   return output;
 }
 
