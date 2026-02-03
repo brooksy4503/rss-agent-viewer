@@ -510,8 +510,9 @@ function displayRankedArticles(articles: RankedArticle[]) {
   articles.forEach((article: any, index: number) => {
     const published = article.publishedAt ? new Date(article.publishedAt).toLocaleDateString() : 'Unknown';
     const readStatus = article.readAt ? chalk.green('✓') : chalk.dim('○');
+    const relevancePercent = Math.round((1 - Math.min(Math.abs(article.relevanceScore), 10) / 10) * 100);
 
-    console.log(`\n${chalk.bold(`${index + 1}. ${article.title}`)} ${chalk.dim(`(score: ${article.relevanceScore})`)}`);
+    console.log(`\n${chalk.bold(`${index + 1}. ${article.title}`)} ${chalk.dim(`(${relevancePercent}% match)`)}`);
     console.log(chalk.dim(`   ${article.link}`));
     console.log(chalk.dim(`   Published: ${published}  ${readStatus}`));
   });

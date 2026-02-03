@@ -228,12 +228,36 @@ export class FeedDatabase {
   }
 
   getFeedByUrl(url: string): Feed | undefined {
-    const stmt = this.db.prepare('SELECT * FROM feeds WHERE url = ?');
+    const stmt = this.db.prepare(`
+      SELECT 
+        id,
+        url,
+        title,
+        link,
+        type,
+        category,
+        created_at as createdAt,
+        updated_at as updatedAt
+      FROM feeds
+      WHERE url = ?
+    `);
     return stmt.get(url) as Feed | undefined;
   }
 
   getAllFeeds(): Feed[] {
-    const stmt = this.db.prepare('SELECT * FROM feeds ORDER BY created_at DESC');
+    const stmt = this.db.prepare(`
+      SELECT 
+        id,
+        url,
+        title,
+        link,
+        type,
+        category,
+        created_at as createdAt,
+        updated_at as updatedAt
+      FROM feeds
+      ORDER BY created_at DESC
+    `);
     return stmt.all() as Feed[];
   }
 
@@ -268,7 +292,18 @@ export class FeedDatabase {
 
   getArticlesByFeedId(feedId: number, limit: number = 20): Article[] {
     const stmt = this.db.prepare(`
-      SELECT * FROM articles
+      SELECT 
+        id,
+        feed_id,
+        title,
+        link,
+        content,
+        summary,
+        author,
+        published_at as publishedAt,
+        read_at as readAt,
+        created_at as createdAt
+      FROM articles
       WHERE feed_id = ?
       ORDER BY published_at DESC
       LIMIT ?
@@ -278,7 +313,18 @@ export class FeedDatabase {
 
   getAllArticles(limit: number = 20, offset: number = 0): Article[] {
     const stmt = this.db.prepare(`
-      SELECT * FROM articles
+      SELECT 
+        id,
+        feed_id,
+        title,
+        link,
+        content,
+        summary,
+        author,
+        published_at as publishedAt,
+        read_at as readAt,
+        created_at as createdAt
+      FROM articles
       ORDER BY published_at DESC
       LIMIT ? OFFSET ?
     `);
@@ -287,7 +333,18 @@ export class FeedDatabase {
 
   searchArticles(query: string, limit: number = 20): Article[] {
     const stmt = this.db.prepare(`
-      SELECT * FROM articles
+      SELECT 
+        id,
+        feed_id,
+        title,
+        link,
+        content,
+        summary,
+        author,
+        published_at as publishedAt,
+        read_at as readAt,
+        created_at as createdAt
+      FROM articles
       WHERE title LIKE ? OR summary LIKE ? OR content LIKE ?
       ORDER BY published_at DESC
       LIMIT ?
@@ -323,7 +380,18 @@ export class FeedDatabase {
     const offset = options.offset || 0;
 
     const stmt = this.db.prepare(`
-      SELECT a.*, bm25(articles_fts) as relevanceScore
+      SELECT 
+        a.id,
+        a.feed_id,
+        a.title,
+        a.link,
+        a.content,
+        a.summary,
+        a.author,
+        a.published_at as publishedAt,
+        a.read_at as readAt,
+        a.created_at as createdAt,
+        bm25(articles_fts) as relevanceScore
       FROM articles a
       JOIN articles_fts ON a.rowid = articles_fts.rowid
       ${joinClause}
@@ -374,7 +442,18 @@ export class FeedDatabase {
     const limitClause = `LIMIT ?`;
 
     const stmt = this.db.prepare(`
-      SELECT * FROM articles
+      SELECT 
+        id,
+        feed_id,
+        title,
+        link,
+        content,
+        summary,
+        author,
+        published_at as publishedAt,
+        read_at as readAt,
+        created_at as createdAt
+      FROM articles
       ${whereClause}
       ORDER BY published_at DESC
       ${limitClause}
