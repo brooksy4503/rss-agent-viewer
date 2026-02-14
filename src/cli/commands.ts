@@ -211,6 +211,87 @@ export async function handleRemove(url: string) {
   }
 }
 
+const CONCURRENCY_LIMIT = 10;
+
+async function fetchFeedWithLimit(feed: any, database: FeedDatabase): Promise<{ success: boolean; title: string; articles: number; error?: string }> {
+  try {
+    const parsedFeed = await parseFeed(feed.url);
+
+    if (parsedFeed.title !== feed.title) {
+      database.addFeed({
+        url: feed.url,
+        title: parsedFeed.title,
+        link: parsedFeed.link,
+        type: feed.type,
+        category: feed.category
+      });
+    }
+
+    let articleCount = 0;
+    for (const item of parsedFeed.items) {
+      database.addArticle({
+        feedId: feed.id,
+        title: item.title,
+        link: item.link,
+        content: item.content,
+        summary: item.contentSnippet,
+        author: item.author,
+        publishedAt: item.pubDate ? item.pubDate.toISOString() : new Date().toISOString(),
+        readAt: null
+      });
+      articleCount++;
+    }
+
+    return { success: true, title: feed.title || feed.url, articles: articleCount };
+  } catch (error) {
+    return { success: false, title: feed.title || feed.url, articles: 0, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+async function fetchAllFeedsParallel(feeds: any[], database: FeedDatabase): Promise<void> {
+  const total = feeds.length;
+  let completed = 0;
+  let succeeded = 0;
+  let failed = 0;
+  const errors: string[] = [];
+
+  const batches: any[][] = [];
+  for (let i = 0; i < feeds.length; i += CONCURRENCY_LIMIT) {
+    batches.push(feeds.slice(i, i + CONCURRENCY_LIMIT));
+  }
+
+  for (const batch of batches) {
+    const results = await Promise.allSettled(
+      batch.map(feed => fetchFeedWithLimit(feed, database))
+    );
+
+    for (const result of results) {
+      completed++;
+      if (result.status === 'fulfilled') {
+        if (result.value.success) {
+          succeeded++;
+        } else {
+          failed++;
+          errors.push(`${result.value.title}: ${result.value.error}`);
+        }
+      } else {
+        failed++;
+      }
+    }
+
+    process.stdout.write(`\r${chalk.dim(`Fetching: ${completed}/${total} feeds...`)}`);
+  }
+
+  console.log(`\r${chalk.dim('Fetching:'.padEnd(30))}`);
+  console.log(`${chalk.green('✓')} ${succeeded} feeds fetched successfully`);
+  if (failed > 0) {
+    console.log(`${chalk.yellow('⚠')} ${failed} feeds failed`);
+    if (errors.length <= 5) {
+      errors.forEach(err => console.log(chalk.dim(`  - ${err}`)));
+    }
+  }
+}
+
 export async function handleRead(url: string | undefined, options: any) {
   const database = getDatabase();
 
@@ -221,12 +302,10 @@ export async function handleRead(url: string | undefined, options: any) {
       process.exit(1);
     }
 
-    // Fetch and store articles from the feed
     console.log(chalk.dim(`Fetching: ${feed.url}`));
     try {
       const parsedFeed = await parseFeed(feed.url);
 
-      // Update feed title if it changed
       if (parsedFeed.title !== feed.title) {
         database.addFeed({
           url: feed.url,
@@ -237,7 +316,6 @@ export async function handleRead(url: string | undefined, options: any) {
         });
       }
 
-      // Store articles
       let fetched = 0;
       for (const item of parsedFeed.items) {
         database.addArticle({
@@ -267,44 +345,13 @@ export async function handleRead(url: string | undefined, options: any) {
       db.close();
     }
   } else {
-    // Fetch from all feeds if --all flag is set
-    if (options.all) {
-      const feeds = database.getAllFeeds();
+    const feeds = database.getAllFeeds();
+
+    if (!options.cached && feeds.length > 0) {
       console.log(chalk.dim(`Fetching from ${feeds.length} feed(s)...`));
-
-      for (const feed of feeds) {
-        try {
-          const parsedFeed = await parseFeed(feed.url);
-
-          // Update feed title if it changed
-          if (parsedFeed.title !== feed.title) {
-            database.addFeed({
-              url: feed.url,
-              title: parsedFeed.title,
-              link: parsedFeed.link,
-              type: feed.type,
-              category: feed.category
-            });
-          }
-
-          // Store articles
-          for (const item of parsedFeed.items) {
-            database.addArticle({
-              feedId: feed.id,
-              title: item.title,
-              link: item.link,
-              content: item.content,
-              summary: item.contentSnippet,
-              author: item.author,
-              publishedAt: item.pubDate ? item.pubDate.toISOString() : new Date().toISOString(),
-              readAt: null
-            });
-          }
-          console.log(chalk.dim(`  ✓ ${feed.title}`));
-        } catch (error) {
-          console.log(chalk.dim(`  ✗ ${feed.title}: ${error instanceof Error ? error.message : String(error)}`));
-        }
-      }
+      await fetchAllFeedsParallel(feeds, database);
+    } else if (options.cached) {
+      console.log(chalk.dim('Using cached data (--cached)'));
     }
 
     const filters: any = {};
@@ -609,4 +656,187 @@ export async function handleCache(action: string) {
   } finally {
     if (db) db.close();
   }
+}
+
+function extractDomain(url: string): string {
+  try {
+    const parsed = new URL(url);
+    return parsed.hostname.replace('www.', '');
+  } catch {
+    return url;
+  }
+}
+
+async function validateFeed(url: string): Promise<{ valid: boolean; reason?: string }> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+
+  try {
+    const response = await fetch(url, { 
+      signal: controller.signal,
+      headers: { 'User-Agent': 'rss-agent-viewer/0.3.4' }
+    });
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      if (response.status === 404) return { valid: false, reason: 'Feed not found (404)' };
+      if (response.status === 403) return { valid: false, reason: 'Access denied (403)' };
+      return { valid: false, reason: `HTTP ${response.status}` };
+    }
+
+    const contentType = response.headers.get('content-type') || '';
+    const text = await response.text();
+
+    if (!text.includes('<rss') && !text.includes('<feed') && !text.includes('<atom')) {
+      return { valid: false, reason: 'Not a valid RSS/Atom feed' };
+    }
+
+    const feed = await parseFeed(url);
+    if (!feed || !feed.items || feed.items.length === 0) {
+      return { valid: false, reason: 'No articles found' };
+    }
+
+    return { valid: true };
+  } catch (error) {
+    clearTimeout(timeout);
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes('abort')) return { valid: false, reason: 'Timeout (10s)' };
+    if (message.includes('ENOTFOUND') || message.includes('getaddrinfo')) return { valid: false, reason: 'Domain not found' };
+    if (message.includes('ECONNREFUSED')) return { valid: false, reason: 'Connection refused' };
+    return { valid: false, reason: message.slice(0, 50) };
+  }
+}
+
+export async function handleCleanup(options: { broken?: boolean; duplicates?: boolean; dryRun?: boolean }) {
+  const database = getDatabase();
+  const feeds = database.getAllFeeds();
+
+  if (feeds.length === 0) {
+    console.log(chalk.yellow('No feeds to clean up.'));
+    return;
+  }
+
+  const checkBroken = options.broken === true;
+  const checkDuplicates = options.duplicates === true;
+  const checkBoth = !checkBroken && !checkDuplicates;
+
+  console.log(chalk.dim(`Scanning ${feeds.length} feeds...`));
+  console.log('');
+
+  const toRemove: Array<{ url: string; title: string; reason: string }> = [];
+
+  if (checkDuplicates || checkBoth) {
+    console.log(chalk.bold('Checking for duplicates...'));
+    const domainMap = new Map<string, Array<{ url: string; title: string }>>();
+
+    for (const feed of feeds) {
+      const domain = extractDomain(feed.url);
+      if (!domainMap.has(domain)) {
+        domainMap.set(domain, []);
+      }
+      domainMap.get(domain)!.push({ url: feed.url, title: feed.title });
+    }
+
+    let duplicateCount = 0;
+    for (const [domain, feedsInDomain] of domainMap) {
+      if (feedsInDomain.length > 1) {
+        const validFeeds = feedsInDomain.filter(f => 
+          f.url.includes('/feed') || 
+          f.url.includes('/rss') || 
+          f.url.includes('/atom') ||
+          f.url.includes('.xml')
+        );
+
+        for (const feed of feedsInDomain) {
+          if (validFeeds.length > 0 && !validFeeds.includes(feed)) {
+            toRemove.push({ url: feed.url, title: feed.title, reason: `Duplicate of ${domain}` });
+            duplicateCount++;
+          } else if (validFeeds.length === 0 && feedsInDomain.indexOf(feed) > 0) {
+            toRemove.push({ url: feed.url, title: feed.title, reason: `Duplicate of ${domain}` });
+            duplicateCount++;
+          }
+        }
+      }
+    }
+    console.log(`${chalk.dim('  Found')} ${duplicateCount} ${chalk.dim('potential duplicates')}`);
+  }
+
+  if (checkBroken || checkBoth) {
+    console.log('');
+    console.log(chalk.bold('Checking for broken feeds...'));
+
+    let checked = 0;
+    const batches: any[][] = [];
+    for (let i = 0; i < feeds.length; i += CONCURRENCY_LIMIT) {
+      batches.push(feeds.slice(i, i + CONCURRENCY_LIMIT));
+    }
+
+    for (const batch of batches) {
+      const results = await Promise.all(
+        batch.map(async (feed) => {
+          const result = await validateFeed(feed.url);
+          checked++;
+          return { feed, ...result };
+        })
+      );
+
+      for (const result of results) {
+        if (!result.valid) {
+          toRemove.push({
+            url: result.feed.url,
+            title: result.feed.title,
+            reason: result.reason || 'Unknown error'
+          });
+        }
+      }
+
+      process.stdout.write(`\r${chalk.dim(`  Checked: ${checked}/${feeds.length}`)}`);
+    }
+    console.log('');
+  }
+
+  const uniqueRemovals = Array.from(
+    new Map(toRemove.map(r => [r.url, r])).values()
+  );
+
+  if (uniqueRemovals.length === 0) {
+    console.log('');
+    console.log(`${chalk.green('✓')} All feeds look good!`);
+    if (db) db.close();
+    return;
+  }
+
+  console.log('');
+  console.log(chalk.bold(`Feeds to remove (${uniqueRemovals.length}):`));
+  console.log('');
+
+  for (const item of uniqueRemovals.slice(0, 20)) {
+    console.log(`  ${chalk.red('✗')} ${item.title || item.url}`);
+    console.log(`    ${chalk.dim(item.reason)}`);
+  }
+
+  if (uniqueRemovals.length > 20) {
+    console.log(chalk.dim(`  ... and ${uniqueRemovals.length - 20} more`));
+  }
+
+  if (options.dryRun) {
+    console.log('');
+    console.log(chalk.yellow('Dry run mode - no feeds removed.'));
+    console.log(chalk.dim('Run without --dry-run to remove these feeds.'));
+  } else {
+    console.log('');
+    console.log(chalk.dim(`Removing ${uniqueRemovals.length} feeds...`));
+
+    let removed = 0;
+    for (const item of uniqueRemovals) {
+      if (database.removeFeed(item.url)) {
+        removed++;
+      }
+    }
+
+    console.log(`${chalk.green('✓')} Removed ${removed} feeds`);
+    console.log(chalk.dim(`${feeds.length - removed} feeds remaining`));
+  }
+
+  if (db) db.close();
 }

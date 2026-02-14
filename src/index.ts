@@ -14,6 +14,7 @@ import {
   handleImport,
   handleExport,
   handleCache,
+  handleCleanup,
 } from './cli/commands.js';
 
 let __dirname: string;
@@ -63,7 +64,7 @@ program
 program
   .command('read [url]')
   .description('Read articles from a feed or all feeds')
-  .option('--all', 'Read from all feeds')
+  .option('--cached', 'Use cached data only, skip fetching')
   .option('--limit <n>', 'Maximum number of articles', '20')
   .option('--since <date>', 'Show articles newer than date')
   .option('--author <name>', 'Filter by author')
@@ -114,5 +115,13 @@ program
   .command('cache <action>')
   .description('Manage cache (stats, clear, refresh)')
   .action(handleCache);
+
+program
+  .command('cleanup')
+  .description('Remove broken and duplicate feeds (runs both checks by default)')
+  .option('--broken', 'Only remove feeds that fail to fetch')
+  .option('--duplicates', 'Only remove duplicate feeds from same domain')
+  .option('--dry-run', 'Show what would be removed without removing')
+  .action(handleCleanup);
 
 program.parse(process.argv);

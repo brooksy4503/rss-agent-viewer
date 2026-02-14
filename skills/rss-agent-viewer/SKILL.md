@@ -48,6 +48,7 @@ rss-viewer discover-search <query>
 rss-viewer import <file>
 rss-viewer export
 rss-viewer cache <action>
+rss-viewer cleanup
 ```
 
 ## Usage patterns
@@ -61,6 +62,33 @@ rss-viewer add https://example.com/rss.xml
 ### Read a single feed
 ```bash
 rss-viewer read https://example.com/rss.xml
+```
+
+### Read all feeds (fetches fresh by default)
+```bash
+# Fetches fresh articles from all feeds in parallel
+rss-viewer read
+
+# Use cached data only (skip network requests)
+rss-viewer read --cached
+
+# Limit results
+rss-viewer read --limit 10
+```
+
+### Clean up invalid feeds
+```bash
+# Remove broken and duplicate feeds
+rss-viewer cleanup
+
+# Preview what would be removed
+rss-viewer cleanup --dry-run
+
+# Only remove broken feeds
+rss-viewer cleanup --broken
+
+# Only remove duplicates
+rss-viewer cleanup --duplicates
 ```
 
 ### Search across all feeds
@@ -144,6 +172,7 @@ EXA_API_URL="https://api.exa.ai/search"      # Custom Exa endpoint (optional)
 - Discover new feeds from web search queries
 - Automate feed discovery and subscription workflow
 - Import or export subscriptions via OPML
+- Clean up broken or duplicate feeds from database
 
 ## More information
 

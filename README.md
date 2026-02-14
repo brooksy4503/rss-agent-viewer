@@ -47,12 +47,61 @@ rss-viewer read
 - `discover <url>` - Discover feeds from a URL
 - `feeds` - List all subscribed feeds
 - `remove <url>` - Remove a feed by URL
-- `read [url]` - Read articles from a feed or all feeds
+- `read [url]` - Read articles from a feed or all feeds (fetches fresh by default)
 - `search <query>` - Search across all feeds (local or web)
 - `discover-search <query>` - Search web, discover feeds, add, and search articles
 - `import <file>` - Import feeds from OPML file
 - `export` - Export feeds to OPML or JSON
 - `cache <action>` - Manage cache (stats, clear, refresh)
+- `cleanup` - Remove broken and duplicate feeds
+
+### Read Command
+
+The `read` command fetches fresh articles from all feeds by default with parallel processing:
+
+```bash
+# Fetch and read latest articles from all feeds
+rss-viewer read
+
+# Read from a specific feed
+rss-viewer read https://techcrunch.com/feed/
+
+# Use cached data only (skip network requests)
+rss-viewer read --cached
+
+# Limit results
+rss-viewer read --limit 10
+```
+
+**Options:**
+- `--cached` - Use cached data only, skip fetching
+- `--limit <n>` - Maximum number of articles (default: 20)
+- `--since <date>` - Show articles newer than date
+- `--author <name>` - Filter by author
+- `--tag <tag>` - Filter by tag/category
+
+### Cleanup Command
+
+Remove invalid feeds from your database:
+
+```bash
+# Remove both broken and duplicate feeds
+rss-viewer cleanup
+
+# Only remove broken feeds (404s, timeouts, non-feed URLs)
+rss-viewer cleanup --broken
+
+# Only remove duplicate feeds from same domain
+rss-viewer cleanup --duplicates
+
+# Preview what would be removed
+rss-viewer cleanup --dry-run
+```
+
+**Options:**
+- `--broken` - Only remove feeds that fail to fetch
+- `--duplicates` - Only remove duplicate feeds from same domain
+- `--dry-run` - Show what would be removed without removing
 
 ## Development
 
