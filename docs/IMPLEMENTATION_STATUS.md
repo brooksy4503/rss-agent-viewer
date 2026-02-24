@@ -405,7 +405,7 @@ Error scanning https://vercel.com/templates
 **Status:** Fully functional  
 **What Works:**
 - `init` - Creates config directory and database
-- `add <url>` - Adds feed with optional --discover and --category
+- `add <url>` - Adds feed with optional --discover, --category, and --timeout
 - `discover <url>` - Calls rss-discover CLI (unstable)
 - `feeds` - Lists all feeds with metadata
 - `remove <url>` - Removes feed by URL
@@ -823,11 +823,11 @@ Store in database as articles
 ```bash
 # Database
 rss-viewer init                    # Initialize (creates ~/.config/rss-viewer/)
-rss-viewer add <url>              # Add feed (with optional --discover and --category)
+rss-viewer add <url>              # Add feed (optional: --discover, --category, --timeout)
 rss-viewer discover <url>             # Discover feeds from URL (uses rss-discover CLI)
 rss-viewer feeds                    # List all feeds
 rss-viewer remove <url>             # Remove feed
-rss-viewer read [url]             # Read articles (with --all, --limit, --since, --author, --tag, --reverse)
+rss-viewer read [url]             # Read articles (optional: --cached, --limit, --since, --author, --tag, --reverse, --timeout, --overall-timeout)
 rss-viewer search <query>           # Search articles (with --limit, --since, --tag)
 rss-viewer import <file>             # Import OPML file
 rss-viewer export              # Export to JSON or OPML
@@ -908,6 +908,7 @@ RSS_VIEWER_DB_PATH - Custom database path (default: ~/.config/rss-viewer/feeds.d
 RSS_VIEWER_CONFIG_PATH - Custom config path (default: ~/.config/rss-viewer/config.json)
 RSS_VIEWER_CACHE_TTL - Discovery cache TTL (default: 300000ms = 5 minutes)
 RSS_DISCOVER_TIMEOUT - Discovery timeout (default: 10000ms = 10 seconds)
+RSS_FEED_TIMEOUT - Per-feed fetch timeout (default: 10000ms); also config feedTimeout / overallTimeout
 RSS_DISCOVER_MAX_BLOGS - Maximum blog paths to scan (default: 5)
 RSS_DISCOVER_BIN - Override discovery binary path
 RSS_DISCOVER_PATH - Override discovery script path (run with Node)

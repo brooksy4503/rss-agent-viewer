@@ -14,9 +14,9 @@ let db: FeedDatabase | null = null;
 let discoveryCache: DiscoveryCache | null = null;
 let config: Config | null = null;
 
-async function fetchFeedTitle(feedUrl: string): Promise<string | null> {
+async function fetchFeedTitle(feedUrl: string, timeoutMs: number = 10000): Promise<string | null> {
   try {
-    const parsed = await parseFeed(feedUrl);
+    const parsed = await parseFeed(feedUrl, timeoutMs);
     return parsed.title;
   } catch {
     return null;
@@ -63,10 +63,11 @@ export async function handleInit() {
   console.log('  rss-viewer discover <url>');
 }
 
-export async function handleAdd(url: string, options: { discover?: boolean; category?: string }) {
+export async function handleAdd(url: string, options: { discover?: boolean; category?: string; timeout?: string }) {
   const database = getDatabase();
   const cache = getDiscoveryCache();
   const settings = getConfig();
+  const feedTimeout = parseTimeoutOption(options.timeout, settings.feedTimeout);
 
   let feedUrl = url;
   let feedTitle = url;
@@ -103,7 +104,7 @@ export async function handleAdd(url: string, options: { discover?: boolean; cate
 
   if (discoveredFeeds.length > 0) {
     feedUrl = discoveredFeeds[0].url;
-    const realTitle = await fetchFeedTitle(feedUrl);
+    const realTitle = await fetchFeedTitle(feedUrl, feedTimeout);
     feedTitle = realTitle || discoveredFeeds[0].title || url;
     feedType = discoveredFeeds[0].type === 'unknown' ? 'rss' : discoveredFeeds[0].type;
 
@@ -213,9 +214,9 @@ export async function handleRemove(url: string) {
 
 const CONCURRENCY_LIMIT = 10;
 
-async function fetchFeedWithLimit(feed: any, database: FeedDatabase): Promise<{ success: boolean; title: string; articles: number; error?: string }> {
+async function fetchFeedWithLimit(feed: any, database: FeedDatabase, timeoutMs: number): Promise<{ success: boolean; title: string; articles: number; error?: string }> {
   try {
-    const parsedFeed = await parseFeed(feed.url);
+    const parsedFeed = await parseFeed(feed.url, timeoutMs);
 
     if (parsedFeed.title !== feed.title) {
       database.addFeed({
@@ -248,7 +249,7 @@ async function fetchFeedWithLimit(feed: any, database: FeedDatabase): Promise<{ 
   }
 }
 
-async function fetchAllFeedsParallel(feeds: any[], database: FeedDatabase): Promise<void> {
+async function fetchAllFeedsParallel(feeds: any[], database: FeedDatabase, timeoutMs: number, overallTimeoutMs?: number): Promise<void> {
   const total = feeds.length;
   let completed = 0;
   let succeeded = 0;
@@ -260,26 +261,47 @@ async function fetchAllFeedsParallel(feeds: any[], database: FeedDatabase): Prom
     batches.push(feeds.slice(i, i + CONCURRENCY_LIMIT));
   }
 
-  for (const batch of batches) {
-    const results = await Promise.allSettled(
-      batch.map(feed => fetchFeedWithLimit(feed, database))
-    );
+  // Add overall timeout if specified
+  const overallTimeoutPromise = overallTimeoutMs ? new Promise<never>((_, reject) => {
+    setTimeout(() => reject(new Error(`Overall fetch timeout after ${overallTimeoutMs}ms`)), overallTimeoutMs);
+  }) : null;
 
-    for (const result of results) {
-      completed++;
-      if (result.status === 'fulfilled') {
-        if (result.value.success) {
-          succeeded++;
+  const fetchPromise = (async () => {
+    for (const batch of batches) {
+      const results = await Promise.allSettled(
+        batch.map(feed => fetchFeedWithLimit(feed, database, timeoutMs))
+      );
+
+      for (const result of results) {
+        completed++;
+        if (result.status === 'fulfilled') {
+          if (result.value.success) {
+            succeeded++;
+          } else {
+            failed++;
+            errors.push(`${result.value.title}: ${result.value.error}`);
+          }
         } else {
           failed++;
-          errors.push(`${result.value.title}: ${result.value.error}`);
         }
-      } else {
-        failed++;
       }
-    }
 
-    process.stdout.write(`\r${chalk.dim(`Fetching: ${completed}/${total} feeds...`)}`);
+      process.stdout.write(`\r${chalk.dim(`Fetching: ${completed}/${total} feeds...`)}`);
+    }
+  })();
+
+  try {
+    if (overallTimeoutPromise) {
+      await Promise.race([fetchPromise, overallTimeoutPromise]);
+    } else {
+      await fetchPromise;
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('Overall fetch timeout')) {
+      console.log(`\n${chalk.yellow('⚠')} ${error.message} - using partial results`);
+    } else {
+      throw error;
+    }
   }
 
   console.log(`\r${chalk.dim('Fetching:'.padEnd(30))}`);
@@ -292,8 +314,17 @@ async function fetchAllFeedsParallel(feeds: any[], database: FeedDatabase): Prom
   }
 }
 
+function parseTimeoutOption(value: string | undefined, fallback: number): number {
+  if (value == null || value === '') return fallback;
+  const n = parseInt(value, 10);
+  return Number.isNaN(n) ? fallback : n;
+}
+
 export async function handleRead(url: string | undefined, options: any) {
   const database = getDatabase();
+  const settings = getConfig();
+  const timeoutMs = parseTimeoutOption(options.timeout, settings.feedTimeout);
+  const overallTimeoutMs = parseTimeoutOption(options.overallTimeout, settings.overallTimeout);
 
   if (url) {
     const feed = database.getFeedByUrl(url);
@@ -304,7 +335,7 @@ export async function handleRead(url: string | undefined, options: any) {
 
     console.log(chalk.dim(`Fetching: ${feed.url}`));
     try {
-      const parsedFeed = await parseFeed(feed.url);
+      const parsedFeed = await parseFeed(feed.url, timeoutMs);
 
       if (parsedFeed.title !== feed.title) {
         database.addFeed({
@@ -349,7 +380,7 @@ export async function handleRead(url: string | undefined, options: any) {
 
     if (!options.cached && feeds.length > 0) {
       console.log(chalk.dim(`Fetching from ${feeds.length} feed(s)...`));
-      await fetchAllFeedsParallel(feeds, database);
+      await fetchAllFeedsParallel(feeds, database, timeoutMs, overallTimeoutMs);
     } else if (options.cached) {
       console.log(chalk.dim('Using cached data (--cached)'));
     }
@@ -498,7 +529,7 @@ export async function handleDiscoverSearch(query: string, options: any) {
         console.log(chalk.dim(`Fetching articles from: ${feed.title}`));
 
         try {
-          const parsed = await parseFeed(feed.url);
+          const parsed = await parseFeed(feed.url, config.feedTimeout);
 
           for (const item of parsed.items) {
             database.addArticle({
@@ -691,7 +722,8 @@ async function validateFeed(url: string): Promise<{ valid: boolean; reason?: str
       return { valid: false, reason: 'Not a valid RSS/Atom feed' };
     }
 
-    const feed = await parseFeed(url);
+    const feedTimeout = getConfig().feedTimeout;
+    const feed = await parseFeed(url, feedTimeout);
     if (!feed || !feed.items || feed.items.length === 0) {
       return { valid: false, reason: 'No articles found' };
     }

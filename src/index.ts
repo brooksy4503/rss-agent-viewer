@@ -41,6 +41,7 @@ program
   .description('Add a feed to database')
   .option('--discover', 'Auto-discover feeds from URL')
   .option('--category <name>', 'Feed category')
+  .option('--timeout <ms>', 'Per-feed fetch timeout in milliseconds (e.g. when resolving title after discovery)')
   .action(handleAdd);
 
 program
@@ -70,6 +71,8 @@ program
   .option('--author <name>', 'Filter by author')
   .option('--tag <tag>', 'Filter by tag/category')
   .option('--reverse', 'Show oldest articles first')
+  .option('--timeout <ms>', 'Per-feed fetch timeout in milliseconds')
+  .option('--overall-timeout <ms>', 'Overall fetch timeout in milliseconds (for --all with many feeds)')
   .action(handleRead);
 
 program

@@ -26,8 +26,9 @@ rss-viewer init
 # Discover feeds for a site
 rss-viewer discover https://example.com
 
-# Subscribe to a feed
+# Subscribe to a feed (optional: --timeout for slow feeds)
 rss-viewer add https://example.com/feed.xml
+rss-viewer add https://slow-site.com/feed.xml --timeout 30000
 
 # List feeds and read articles
 rss-viewer feeds
@@ -74,6 +75,9 @@ rss-viewer read --cached
 
 # Limit results
 rss-viewer read --limit 10
+
+# Timeouts (for slow feeds or many feeds)
+rss-viewer read --timeout 15000 --overall-timeout 180000
 ```
 
 ### Clean up invalid feeds
@@ -146,11 +150,12 @@ rss-viewer discover-search "WebGPU" \
 **Environment Variables:**
 ```bash
 EXA_API_KEY="your-api-key"                    # Exa API key (optional)
+RSS_FEED_TIMEOUT=10000                        # Per-feed fetch timeout (ms)
 RSS_VIEWER_SEARCH_PROVIDER="agent|exa"        # Search provider (default: agent)
 RSS_VIEWER_MAX_WEB_RESULTS=10                 # Max web search results
 RSS_VIEWER_SEARCH_LIMIT=20                    # Max article results
-RSS_VIEWER_BOOST_RECENT=false                # Boost recent articles in search
-EXA_API_URL="https://api.exa.ai/search"      # Custom Exa endpoint (optional)
+RSS_VIEWER_BOOST_RECENT=false                 # Boost recent articles in search
+EXA_API_URL="https://api.exa.ai/search"       # Custom Exa endpoint (optional)
 ```
 
 **Config File (~/.config/rss-viewer/config.json):**
@@ -158,6 +163,8 @@ EXA_API_URL="https://api.exa.ai/search"      # Custom Exa endpoint (optional)
 {
   "webSearchProvider": "exa",
   "exaApiKey": "your-api-key",
+  "feedTimeout": 10000,
+  "overallTimeout": 120000,
   "maxWebResults": 10,
   "searchResultsLimit": 20,
   "boostRecentSearch": false

@@ -43,11 +43,11 @@ rss-viewer read
 ## Commands
 
 - `init` - Initialize configuration and database
-- `add <url>` - Add a feed to the database
+- `add <url>` - Add a feed to the database (supports `--discover`, `--category`, `--timeout`)
 - `discover <url>` - Discover feeds from a URL
 - `feeds` - List all subscribed feeds
 - `remove <url>` - Remove a feed by URL
-- `read [url]` - Read articles from a feed or all feeds (fetches fresh by default)
+- `read [url]` - Read articles from a feed or all feeds (fetches fresh by default; supports `--cached`, `--timeout`, `--overall-timeout`)
 - `search <query>` - Search across all feeds (local or web)
 - `discover-search <query>` - Search web, discover feeds, add, and search articles
 - `import <file>` - Import feeds from OPML file
@@ -79,6 +79,26 @@ rss-viewer read --limit 10
 - `--since <date>` - Show articles newer than date
 - `--author <name>` - Filter by author
 - `--tag <tag>` - Filter by tag/category
+- `--reverse` - Show oldest articles first
+- `--timeout <ms>` - Per-feed fetch timeout in milliseconds (default: from config, typically 10000)
+- `--overall-timeout <ms>` - Overall fetch timeout when reading all feeds (default: from config, typically 120000)
+
+### Add Command
+
+When adding a feed, you can override the fetch timeout used to resolve the feed title (e.g. after `--discover`):
+
+```bash
+# Add with discovery (uses config feedTimeout for the title fetch)
+rss-viewer add https://example.com --discover
+
+# Use a longer timeout for slow feeds
+rss-viewer add https://slow-site.com/feed.xml --timeout 30000
+```
+
+**Options:**
+- `--discover` - Auto-discover feeds from the URL
+- `--category <name>` - Feed category (default: General)
+- `--timeout <ms>` - Per-feed fetch timeout in milliseconds (when resolving title after discovery)
 
 ### Cleanup Command
 
@@ -120,6 +140,21 @@ npm run dev
 ```
 
 ## Configuration
+
+### Feed timeouts
+
+Per-feed and overall fetch timeouts can be set in config or overridden by CLI:
+
+- **Per-feed timeout** – applied to each feed fetch (add, read, discover-search). Default: 10000 ms. Env: `RSS_FEED_TIMEOUT`.
+- **Overall timeout** – when reading all feeds (`rss-viewer read`), the whole operation is capped. Default: 120000 ms.
+
+Config file (~/.config/rss-viewer/config.json):
+```json
+{
+  "feedTimeout": 10000,
+  "overallTimeout": 120000
+}
+```
 
 ### Web Search
 

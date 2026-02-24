@@ -7,6 +7,8 @@ export interface Config {
   configPath: string;
   cacheTTL: number;
   discoveryTimeout: number;
+  feedTimeout: number;
+  overallTimeout: number;
   maxBlogs: number;
   exaApiKey?: string;
   exaApiUrl?: string;
@@ -20,6 +22,8 @@ const BASE_CONFIG: Config = {
   configPath: join(homedir(), '.config', 'rss-viewer', 'config.json'),
   cacheTTL: 300000,
   discoveryTimeout: 10000,
+  feedTimeout: 10000,
+  overallTimeout: 120000,
   maxBlogs: 5,
   exaApiKey: undefined,
   exaApiUrl: 'https://api.exa.ai/search',
@@ -37,6 +41,7 @@ function parseEnvNumber(value: string | undefined): number | undefined {
 function applyEnvOverrides(config: Config): Config {
   const cacheTTL = parseEnvNumber(process.env.RSS_VIEWER_CACHE_TTL);
   const discoveryTimeout = parseEnvNumber(process.env.RSS_DISCOVER_TIMEOUT);
+  const feedTimeout = parseEnvNumber(process.env.RSS_FEED_TIMEOUT);
   const maxBlogs = parseEnvNumber(process.env.RSS_DISCOVER_MAX_BLOGS);
   const maxWebResults = parseEnvNumber(process.env.RSS_VIEWER_MAX_WEB_RESULTS);
   const searchResultsLimit = parseEnvNumber(process.env.RSS_VIEWER_SEARCH_LIMIT);
@@ -47,6 +52,7 @@ function applyEnvOverrides(config: Config): Config {
     configPath: process.env.RSS_VIEWER_CONFIG_PATH || config.configPath,
     cacheTTL: cacheTTL ?? config.cacheTTL,
     discoveryTimeout: discoveryTimeout ?? config.discoveryTimeout,
+    feedTimeout: feedTimeout ?? config.feedTimeout,
     maxBlogs: maxBlogs ?? config.maxBlogs,
     exaApiKey: process.env.EXA_API_KEY || config.exaApiKey,
     exaApiUrl: process.env.EXA_API_URL || config.exaApiUrl,

@@ -19,15 +19,33 @@ export interface ParsedArticle {
   author: string | null;
 }
 
-export async function parseFeed(url: string): Promise<ParsedFeed> {
+export async function parseFeed(url: string, timeoutMs: number = 10000): Promise<ParsedFeed> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
   try {
-    const feed = await parser.parseURL(url);
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        'User-Agent': 'rss-agent-viewer/0.3.5',
+        'Accept': 'application/rss+xml, application/atom+xml, application/xml, text/xml'
+      }
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const xmlContent = await response.text();
+    const feed = await parser.parseString(xmlContent);
 
     return {
       title: feed.title || 'Unknown Feed',
       description: feed.description || '',
       link: feed.link || url,
-      items: feed.items.map(item => ({
+      items: feed.items.map((item: any) => ({
         title: item.title || 'No title',
         link: item.link || '',
         pubDate: item.pubDate ? new Date(item.pubDate) : null,
@@ -36,8 +54,18 @@ export async function parseFeed(url: string): Promise<ParsedFeed> {
         author: item.author || item.creator || null
       }))
     };
-  } catch (error) {
-    throw new Error(`Failed to parse feed: ${error instanceof Error ? error.message : String(error)}`);
+  } catch (error: unknown) {
+    clearTimeout(timeoutId);
+
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(`Feed fetch timeout after ${timeoutMs}ms: ${url}`);
+    }
+
+    if (error instanceof Error) {
+      throw new Error(`Failed to parse feed: ${error.message}`);
+    }
+
+    throw new Error(`Failed to parse feed: ${String(error)}`);
   }
 }
 
