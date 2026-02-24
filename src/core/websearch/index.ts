@@ -4,6 +4,9 @@ export class WebSearch {
   constructor(private config: Config) {}
 
   async search(query: string, options: WebSearchOptions): Promise<WebSearchResponse> {
+    if (options.provider === 'agent') {
+      return { results: [], query, provider: 'agent' };
+    }
     return this.searchWithExa(query, options);
   }
 

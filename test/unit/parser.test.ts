@@ -1,22 +1,34 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-const parseURLMock = vi.hoisted(() => vi.fn());
+const parseStringMock = vi.hoisted(() => vi.fn());
 
 vi.mock('rss-parser', () => ({
   default: class {
-    parseURL = parseURLMock;
+    parseString = parseStringMock;
   }
 }));
 
 import { parseFeed, getFeedType } from '../../src/core/parser.js';
 
 describe('Parser', () => {
+  const mockFetch = vi.fn(() =>
+    Promise.resolve({
+      ok: true,
+      text: () => Promise.resolve('<rss version="2.0"></rss>')
+    } as Response)
+  );
+
   beforeEach(() => {
-    parseURLMock.mockReset();
+    parseStringMock.mockReset();
+    vi.stubGlobal('fetch', mockFetch);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it('parses RSS 2.0 feeds with defaults', async () => {
-    parseURLMock.mockResolvedValue({
+    parseStringMock.mockResolvedValue({
       title: 'Example Feed',
       description: 'Sample feed',
       link: 'https://example.com',
@@ -50,7 +62,7 @@ describe('Parser', () => {
   });
 
   it('falls back to Unknown Feed when metadata is missing', async () => {
-    parseURLMock.mockResolvedValue({
+    parseStringMock.mockResolvedValue({
       title: undefined,
       description: undefined,
       link: undefined,
@@ -64,7 +76,7 @@ describe('Parser', () => {
   });
 
   it('throws a helpful error on parse failure', async () => {
-    parseURLMock.mockRejectedValue(new Error('Bad XML'));
+    parseStringMock.mockRejectedValue(new Error('Bad XML'));
 
     await expect(parseFeed('https://example.com/rss')).rejects.toThrow('Failed to parse feed: Bad XML');
   });

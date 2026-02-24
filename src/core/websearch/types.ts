@@ -15,6 +15,7 @@ export interface WebSearchOptions {
   maxResults?: number;
   apiKey?: string;
   apiUrl?: string;
+  provider?: string;
 }
 
 export interface Config {
