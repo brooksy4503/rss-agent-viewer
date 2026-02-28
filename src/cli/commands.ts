@@ -390,9 +390,12 @@ export async function handleRead(url: string | undefined, options: any) {
     if (options.since) filters.since = new Date(options.since);
     if (options.author) filters.author = options.author;
     if (options.tag) filters.category = options.tag;
+    if (options.reverse) filters.reverse = true;
 
-    const articles = database.filterArticles(filters);
-    console.log('\nReading from all feeds\n');
+    const articles = options.latestPerFeed
+      ? database.getLatestArticlePerFeed(filters)
+      : database.filterArticles(filters);
+    console.log(options.latestPerFeed ? '\nReading latest article per feed\n' : '\nReading from all feeds\n');
     displayArticles(articles);
 
     if (db) {

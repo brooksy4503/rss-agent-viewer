@@ -71,6 +71,7 @@ program
   .option('--author <name>', 'Filter by author')
   .option('--tag <tag>', 'Filter by tag/category')
   .option('--reverse', 'Show oldest articles first')
+  .option('--latest-per-feed', 'Show only the latest article from each feed (all-feeds mode)')
   .option('--timeout <ms>', 'Per-feed fetch timeout in milliseconds')
   .option('--overall-timeout <ms>', 'Overall fetch timeout in milliseconds (for --all with many feeds)')
   .action(handleRead);

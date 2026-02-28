@@ -462,6 +462,72 @@ export class FeedDatabase {
     return stmt.all(...params, limit) as Article[];
   }
 
+  getLatestArticlePerFeed(options: { limit?: number; since?: Date; author?: string; category?: string; reverse?: boolean }): Article[] {
+    const conditions: string[] = [];
+    const params: any[] = [];
+    let joinClause = '';
+
+    if (options.since) {
+      conditions.push('a.published_at >= ?');
+      params.push(options.since.toISOString());
+    }
+
+    if (options.author) {
+      conditions.push('a.author LIKE ?');
+      params.push(`%${options.author}%`);
+    }
+
+    if (options.category) {
+      joinClause = 'JOIN feeds f ON a.feed_id = f.id';
+      conditions.push('f.category = ?');
+      params.push(options.category);
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const limit = options.limit || 20;
+    const sortDirection = options.reverse ? 'ASC' : 'DESC';
+
+    const stmt = this.db.prepare(`
+      WITH ranked AS (
+        SELECT
+          a.id,
+          a.feed_id,
+          a.title,
+          a.link,
+          a.content,
+          a.summary,
+          a.author,
+          a.published_at as publishedAt,
+          a.read_at as readAt,
+          a.created_at as createdAt,
+          ROW_NUMBER() OVER (
+            PARTITION BY a.feed_id
+            ORDER BY a.published_at DESC, a.id DESC
+          ) AS rn
+        FROM articles a
+        ${joinClause}
+        ${whereClause}
+      )
+      SELECT
+        id,
+        feed_id,
+        title,
+        link,
+        content,
+        summary,
+        author,
+        publishedAt,
+        readAt,
+        createdAt
+      FROM ranked
+      WHERE rn = 1
+      ORDER BY publishedAt ${sortDirection}
+      LIMIT ?
+    `);
+
+    return stmt.all(...params, limit) as Article[];
+  }
+
   markAsRead(articleId: number): void {
     const stmt = this.db.prepare(`
       UPDATE articles SET read_at = CURRENT_TIMESTAMP WHERE id = ?

@@ -76,6 +76,9 @@ rss-viewer read --cached
 # Limit results
 rss-viewer read --limit 10
 
+# One latest article per feed (feed-diverse results)
+rss-viewer read --latest-per-feed --limit 10
+
 # Timeouts (for slow feeds or many feeds)
 rss-viewer read --timeout 15000 --overall-timeout 180000
 ```

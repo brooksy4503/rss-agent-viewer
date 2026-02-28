@@ -71,6 +71,9 @@ rss-viewer read --cached
 
 # Limit results
 rss-viewer read --limit 10
+
+# Show latest item from different feeds (one per feed)
+rss-viewer read --latest-per-feed --limit 10
 ```
 
 **Options:**
@@ -80,6 +83,7 @@ rss-viewer read --limit 10
 - `--author <name>` - Filter by author
 - `--tag <tag>` - Filter by tag/category
 - `--reverse` - Show oldest articles first
+- `--latest-per-feed` - Show only the latest article from each feed (all-feeds mode)
 - `--timeout <ms>` - Per-feed fetch timeout in milliseconds (default: from config, typically 10000)
 - `--overall-timeout <ms>` - Overall fetch timeout when reading all feeds (default: from config, typically 120000)
 
