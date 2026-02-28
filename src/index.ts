@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import path from 'path';
+import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { Command } from 'commander';
 import {
@@ -24,12 +25,22 @@ try {
   __dirname = path.dirname(process.execPath);
 }
 
+function getCliVersion(): string {
+  try {
+    const packageJsonPath = path.join(__dirname, '..', 'package.json');
+    const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf-8')) as { version?: string };
+    return packageJson.version || '0.0.0';
+  } catch {
+    return '0.0.0';
+  }
+}
+
 const program = new Command();
 
 program
   .name('rss-viewer')
   .description('CLI RSS/Atom feed viewer with automatic feed discovery')
-  .version('0.3.0');
+  .version(getCliVersion());
 
 program
   .command('init')
