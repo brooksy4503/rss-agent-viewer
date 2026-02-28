@@ -261,47 +261,47 @@ async function fetchAllFeedsParallel(feeds: any[], database: FeedDatabase, timeo
     batches.push(feeds.slice(i, i + CONCURRENCY_LIMIT));
   }
 
-  // Add overall timeout if specified
-  const overallTimeoutPromise = overallTimeoutMs ? new Promise<never>((_, reject) => {
-    setTimeout(() => reject(new Error(`Overall fetch timeout after ${overallTimeoutMs}ms`)), overallTimeoutMs);
-  }) : null;
+  let timedOut = false;
+  let timeoutHandle: NodeJS.Timeout | null = null;
 
-  const fetchPromise = (async () => {
-    for (const batch of batches) {
-      const results = await Promise.allSettled(
-        batch.map(feed => fetchFeedWithLimit(feed, database, timeoutMs))
-      );
+  if (overallTimeoutMs && overallTimeoutMs > 0) {
+    timeoutHandle = setTimeout(() => {
+      timedOut = true;
+    }, overallTimeoutMs);
+  }
 
-      for (const result of results) {
-        completed++;
-        if (result.status === 'fulfilled') {
-          if (result.value.success) {
-            succeeded++;
-          } else {
-            failed++;
-            errors.push(`${result.value.title}: ${result.value.error}`);
-          }
+  for (const batch of batches) {
+    if (timedOut) break;
+
+    const results = await Promise.allSettled(
+      batch.map(feed => fetchFeedWithLimit(feed, database, timeoutMs))
+    );
+
+    for (const result of results) {
+      completed++;
+      if (result.status === 'fulfilled') {
+        if (result.value.success) {
+          succeeded++;
         } else {
           failed++;
+          errors.push(`${result.value.title}: ${result.value.error}`);
         }
+      } else {
+        failed++;
       }
+    }
 
+    if (!timedOut) {
       process.stdout.write(`\r${chalk.dim(`Fetching: ${completed}/${total} feeds...`)}`);
     }
-  })();
+  }
 
-  try {
-    if (overallTimeoutPromise) {
-      await Promise.race([fetchPromise, overallTimeoutPromise]);
-    } else {
-      await fetchPromise;
-    }
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('Overall fetch timeout')) {
-      console.log(`\n${chalk.yellow('⚠')} ${error.message} - using partial results`);
-    } else {
-      throw error;
-    }
+  if (timeoutHandle) {
+    clearTimeout(timeoutHandle);
+  }
+
+  if (timedOut) {
+    console.log(`\n${chalk.yellow('⚠')} Overall fetch timeout after ${overallTimeoutMs}ms - using partial results`);
   }
 
   console.log(`\r${chalk.dim('Fetching:'.padEnd(30))}`);
