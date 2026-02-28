@@ -8,3 +8,21 @@ coverage
 test/**/*.js
 test/**/*.d.ts
 test/**/*.map
+
+# Local AI/agent tooling artifacts
+.agent/
+.agents/
+.claude/
+.crush/
+.gemini/
+.kilocode/
+.kilocodemodes
+.kiro/
+.opencode/
+
+# Generated BMAD command files (keep custom/manual commands tracked as needed)
+.cursor/commands/bmad-*.md
+
+# BMAD working/output folders
+_bmad/
+_bmad-output/
